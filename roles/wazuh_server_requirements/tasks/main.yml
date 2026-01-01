@@ -1,0 +1,52 @@
+# Initial requirements setup on clean server
+
+- name: Wazuh server requirements
+  when: ansible_distribution in ('Rocky', 'RedHat')
+  tags: requirements
+  block:
+
+    # Requirements
+    - name: Requirements / git, python
+      become: true
+      dnf:
+        name:
+          - git
+          - python3
+          - python3-pip
+          - dnf-plugins-core
+
+    - name: Requirements / install docker-ce dnf repo
+      become: true
+      shell:
+        cmd: dnf config-manager --add-repo https://download.docker.com/linux/rhel/docker-ce.repo
+
+    - name: Requirements / install docker
+      become: true
+      dnf:
+        name:
+          - docker-ce
+          - docker-ce-cli
+          - containerd.io
+          - docker-buildx-plugin
+          - docker-compose-plugin
+
+    - name: Requirements / start docker
+      become: true
+      systemd:
+        name: docker
+        enabled: true
+        state: started
+
+    - name: Requirements / pip
+      tags: requirements
+      pip:
+        name:
+          - requests
+          - lxml
+          - pyyaml
+
+
+- name: Wazuh server requirements
+  when: ansible_distribution not in ('Rocky', 'RedHat')
+  fail:
+    msg: "Not implemented"

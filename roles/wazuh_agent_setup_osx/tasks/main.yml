@@ -1,0 +1,36 @@
+# Setup Wazuh agent on OSX
+
+- name: Wazuh agent setup / OSX
+  become: true
+  block:
+
+    # Set facts
+    - set_fact:
+        WAZUH_AGENT_CONFIG_DIR: '/Library/Ossec/etc'
+
+    # install
+    - name: Wazuh agent install
+      shell:
+        cmd: |
+          cd /tmp/ &&
+          curl --output 'wazuh-agent-4.14.1-1.arm64.pkg' 'https://packages.wazuh.com/4.x/macos/wazuh-agent-4.14.1-1.arm64.pkg' &&
+          echo "WAZUH_MANAGER='{{ WAZUH_SERVER_EXTERNAL_HOST }}'" > /tmp/wazuh_envs && installer -pkg wazuh-agent-4.14.1-1.arm64.pkg -target /
+
+    # config
+    - include_tasks: ../../../tasks/wazuh_agent/config.yml
+
+    # rules
+    - include_tasks: ../../../tasks/wazuh_agent/rules.yml
+
+    # restart services
+    - name: Wazuh agent restart
+      become: true
+      shell:
+        cmd: |
+          export AGENT_EXISTS=$(launchctl print system | grep com.wazuh.agent | wc -l) &&
+          python3 -c '
+          import os, subprocess; 
+          if int(os.environ["AGENT_EXISTS"]) > 0:
+            subprocess.run(["launchctl", "bootout", "system", "/Library/LaunchDaemons/com.wazuh.agent.plist"])
+          ' &&
+          launchctl bootstrap system /Library/LaunchDaemons/com.wazuh.agent.plist

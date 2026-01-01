@@ -1,0 +1,22 @@
+# Setup Wazuh agent
+
+- debug:
+    msg: "Distribution: {{ ansible_distribution }}"
+
+# Setup on mac
+- name: Wazuh agent setup / OSX
+  when: ansible_distribution == 'MacOSX'
+  import_role:
+    name: wazuh_agent_setup_osx
+
+# Setup on Rocky (Rhel)
+- name: Wazuh agent setup / Rhel
+  when: ansible_distribution in ('Rocky', 'RedHat')
+  import_role:
+    name: wazuh_agent_setup_rhel
+
+# Other platforms
+- name: Wazuh agent setup / other
+  when: ansible_distribution not in ('Rocky', 'RedHat', 'MacOSX')
+  fail:
+    msg: "Not implemented"

@@ -1,0 +1,1 @@
+# OSSEC config edit tests

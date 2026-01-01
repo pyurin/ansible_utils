@@ -1,0 +1,49 @@
+- name: Setup wazuh server
+  hosts: wazuh-server
+
+  #collections:
+  #  - pyurin.utils
+
+  tasks:
+
+    # install requirements
+    - block:
+        - include_role:
+            name: wazuh_server_requirements
+      tags: requirements
+
+    # major components setup
+    - block:
+        - include_role:
+            name: wazuh_server_setup_core
+      tags: core
+
+    # basic rules
+    - block:
+        - include_role:
+            name: wazuh_server_setup_rules
+      tags: rules
+
+    # dashboard
+    - name: Authentication success dashboard
+      tags: dashboard
+      pyurin.utils.wazuh_dashboard_saved_search:
+        dashboard_host: "{{ inventory_hostname }}"
+        username: "admin"
+        password: "{{ WAZUH_DASHBOARD_PASS }}"
+        saved_search_title: "Authentication success"
+        filter: 'rule.groups:authentication_success'
+        columns:
+          - timestamp
+          - agent.name
+          - GeoLocation.country_name
+          - data.srcip
+          - full_log
+
+    # telegram integration
+    - block:
+        - include_role:
+            name: wazuh_server_telegram_channel
+        - include_role:
+            name: wazuh_server_telegram_integration
+      tags: telegram

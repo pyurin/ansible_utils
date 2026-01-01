@@ -1,0 +1,24 @@
+# Updates Wazuh manager image
+# To allow running python scripts on container
+
+# Remove wazuh.manager image key
+- name: Wazuh / updating docker image / remove image key
+  yamledit:
+    path: "{{ WAZUH_HOST_DOCKER_DIR }}/docker-compose.yml"
+    separator: '#'
+    key: 'services#wazuh.manager#image'
+    state: absent
+
+# Set wazuh.manager build key
+- name: Wazuh / updating docker image / set build key
+  yamledit:
+    path: "{{ WAZUH_HOST_DOCKER_DIR }}/docker-compose.yml"
+    separator: '#'
+    key: 'services#wazuh.manager#build'
+    value:
+      context: '.'
+      dockerfile_inline: |
+        FROM wazuh/wazuh-manager:4.14.1
+        USER root
+        RUN yum install -y python3-pip && pip3 install requests telebot
+

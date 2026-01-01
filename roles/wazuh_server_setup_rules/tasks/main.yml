@@ -1,0 +1,57 @@
+# Update Wazuh manager rules
+
+# Set facts
+- include_tasks: ./../../../tasks/wazuh_server/set_facts.yml
+
+# Copy rules from docker
+- name: Wazuh rules update / copy file
+  shell:
+    cmd: "docker cp single-node-wazuh.manager-1:/var/ossec/etc/rules/local_rules.xml /tmp/wazuh_local_rules.xml"
+
+# Fix buggy rule
+- name: Wazuh rules update / fix buggy 99904
+  ossconf_edit:
+    path: "/tmp/wazuh_local_rules.xml"
+    xpath: /group[@name='syslog,sshd,']
+    xml_set_raw: |
+      <group name="syslog,sshd,">
+        <rule id="99904" level="9" overwrite="yes">
+          <if_sid>5716</if_sid><list field="srcip" lookup="match_key">etc/lists/malicious-ioc/malicious-ip</list>
+          <description>sshd: Authentication failed from a malicious IP address $(srcip).</description>
+          <group>authentication_failed,pci_dss_10.2.4,pci_dss_10.2.5,</group>
+        </rule>
+      </group>
+
+# Some webapp rules
+- name: Wazuh rules update / add webapp logging
+  ossconf_edit:
+    path: "/tmp/wazuh_local_rules.xml"
+    task_block:
+    xpath: /group[@name='webapp,']
+    xml_set_raw: |
+      <group name="webapp,">
+        <rule id="100300" level="7">
+          <match>[WebApp log]</match>
+          <description>WeApp log</description>
+        </rule>
+        <rule id="100301" level="7">
+          <if_sid>100300</if_sid>
+          <match>authentication_success|authentication success</match>
+          <description>WeApp log, auth success</description>
+          <group>authentication_success,</group>
+        </rule>
+      </group>
+
+# Copy rules to docker
+- name: Wazuh rules update / copy file back
+  shell:
+    cmd: |
+      docker cp /tmp/wazuh_local_rules.xml single-node-wazuh.manager-1:/var/ossec/etc/rules/local_rules.xml &&
+      docker exec single-node-wazuh.manager-1 bash -c "
+        chown root:wazuh /var/ossec/etc/rules/local_rules.xml &&
+        chmod 0640 /var/ossec/etc/rules/local_rules.xml
+      "
+
+# Restart
+- name: Wazuh rules update / restart
+  include_tasks: ./../../../tasks/wazuh_server/restart.yml

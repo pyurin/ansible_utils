@@ -1,0 +1,13 @@
+- name: Setup wazuh agent
+  hosts: all
+
+  #collections:
+  #  - pyurin.utils
+
+  tasks:
+
+    - include_role:
+        name: wazuh_agent_requirements
+        
+    - include_role:
+        name: wazuh_agent_setup

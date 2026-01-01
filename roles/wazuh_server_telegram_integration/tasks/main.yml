@@ -1,0 +1,69 @@
+# Setup Wazuh notifications via telegram using Wazuh integration
+
+# Set facts
+- include_tasks: ./../../../tasks/wazuh_server/set_facts.yml
+
+# Check chat id is present
+- fail:
+    msg: "WAZUH_TELEGRAM_CHAT_ID must be set (or request with get_telegram_chat_id) role"
+  when: WAZUH_TELEGRAM_CHAT_ID is not defined
+
+# Necessary to run python script on manager image
+- name: Setup telegram integration / update docker compose
+  include_tasks: ./../../../tasks/wazuh_server/update_manager_image.yml
+
+# Check services running
+- name: Setup telegram integration / ensure service running
+  include_tasks: ./../../../tasks/wazuh_server/start.yml
+
+# Copy files
+- name: Setup telegram integration / copy files 1
+  copy:
+    src: ./../files/telegram_bot.py
+    dest: "{{ WAZUH_HOST_DOCKER_DIR }}/custom-telegram-bot"
+
+# Copy files
+- name: Setup telegram integration / copy files 2
+  copy:
+    content: |
+      TELEGRAM_API_KEY="{{ WAZUH_TELEGRAM_BOT_API_TOKEN }}"
+      TELEGRAM_CHAT_ID="{{ WAZUH_TELEGRAM_CHAT_ID }}"
+    dest: "{{ WAZUH_HOST_DOCKER_DIR }}/telegram_config.py"
+
+# Copy files
+- name: Setup telegram integration / copy files 3
+  command:
+    cmd: "docker cp {{ WAZUH_HOST_DOCKER_DIR }}/custom-telegram-bot single-node-wazuh.manager-1:/var/ossec/integrations/"
+
+# Copy files
+- name: Setup telegram integration / copy files 3
+  command:
+    cmd: "docker cp {{ WAZUH_HOST_DOCKER_DIR }}/telegram_config.py single-node-wazuh.manager-1:/var/ossec/integrations/"
+
+# Chown files
+- name: Setup telegram integration / chown
+  command:
+    cmd: docker exec single-node-wazuh.manager-1 chown root:wazuh  /var/ossec/integrations/custom-telegram-bot
+
+# Chmod files
+- name: Setup telegram integration / chmod
+  command:
+    cmd: docker exec single-node-wazuh.manager-1 chmod 750 /var/ossec/integrations/custom-telegram-bot
+
+# Wazuh config update
+- name: Setup telegram integration / setup wazuh config / 1
+  ossconf_edit:
+    path: "{{ WAZUH_HOST_DOCKER_DIR }}/config/wazuh_cluster/wazuh_manager.conf"
+    # here the node is create if it does not exist and only here I should point that
+    # only first ossec_config node should be affected
+    xpath: /ossec_config[1]/integration[name='custom-telegram-bot']
+    xml_set_raw: |
+      <integration name="custom-telegram-bot">
+        <name>custom-telegram-bot</name>
+        <group>authentication_success</group>
+        <alert_format>json</alert_format>
+      </integration>
+
+# Restart
+- name: Setup telegram integration / restart Wazuh
+  include_tasks: ./../../../tasks/wazuh_server/restart.yml

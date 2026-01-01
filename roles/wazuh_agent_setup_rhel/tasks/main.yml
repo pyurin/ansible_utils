@@ -1,0 +1,43 @@
+# Setup Wazuh agent on Rhel
+
+- name: Wazuh agent setup / Rhel
+  become: true
+  block:
+
+    # Set facts
+    - set_fact:
+        WAZUH_AGENT_CONFIG_DIR: '/var/ossec/etc'
+
+    # install agent
+    - name: Install yum repo
+      shell:
+        cmd: |
+          rpm --import https://packages.wazuh.com/key/GPG-KEY-WAZUH &&
+          cat > /etc/yum.repos.d/wazuh.repo << EOF
+          [wazuh]
+          gpgcheck=1
+          gpgkey=https://packages.wazuh.com/key/GPG-KEY-WAZUH
+          enabled=1
+          name=EL-\$releasever - Wazuh
+          baseurl=https://packages.wazuh.com/4.x/yum/
+          priority=1
+          EOF
+
+    # install agent
+    - name: Wazuh agent install
+      shell:
+        cmd: WAZUH_MANAGER="{{ WAZUH_SERVER_EXTERNAL_HOST }}" WAZUH_AGENT_NAME="{{ inventory_hostname }}" dnf install wazuh-agent -y
+
+    # config
+    - include_tasks: ../../../tasks/wazuh_agent/config.yml
+
+    # rules
+    - include_tasks: ../../../tasks/wazuh_agent/rules.yml
+
+    # restart services
+    - name: Wazuh agent service restart
+      become: true
+      shell:
+        cmd:
+          systemctl stop wazuh-agent &&
+          systemctl start wazuh-agent

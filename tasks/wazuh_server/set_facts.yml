@@ -1,0 +1,39 @@
+# Set facts for server
+
+- name: Wazuh server set facts
+  when: WAZUH_SERVER_HOST_DIR is not defined and ansible_distribution == 'MacOSX'
+  set_fact:
+    WAZUH_SERVER_HOST_DIR: /private/wazuh
+
+- name: Wazuh server set facts
+  when: WAZUH_SERVER_HOST_DIR is not defined and ansible_distribution in ('Rocky', 'RedHat')
+  set_fact:
+    WAZUH_SERVER_HOST_DIR: /usr/share/wazuh
+
+- name: Wazuh server set facts
+  when: WAZUH_SERVER_HOST_USER is not defined
+  set_fact:
+    WAZUH_SERVER_HOST_USER: root
+
+- fail:
+    msg: "WAZUH_SERVER_HOST_DIR is not defined, distribution = {{ ansible_distribution }}"
+  when: WAZUH_SERVER_HOST_DIR is not defined
+
+- name: Wazuh server set facts
+  set_fact:
+    WAZUH_HOST_DOCKER_DIR: "{{ WAZUH_SERVER_HOST_DIR }}/wazuh-docker/single-node"
+
+- name: Wazuh server set facts
+  set_fact:
+    WAZUH_CERTBOT_ETC_PATH: "/etc/letsencrypt"
+  when: WAZUH_CERTBOT_ETC_PATH is not defined
+
+- name: Wazuh server set facts
+  set_fact:
+    WAZUH_CERTBOT_VAR_PATH: "/var/lib/letsencrypt"
+  when: WAZUH_CERTBOT_VAR_PATH is not defined
+
+- name: Wazuh server set facts
+  set_fact:
+    WAZUH_CERTBOT_LOG_PATH: "/var/log/letsencrypt"
+  when: WAZUH_CERTBOT_LOG_PATH is not defined

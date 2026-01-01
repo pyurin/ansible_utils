@@ -1,0 +1,18 @@
+- name: Setup wazuh server certbot
+  hosts: wazuh-server
+
+  #collections:
+  #  - pyurin.utils
+
+  tasks:
+
+    - name: Setup wazuh server
+      hosts: wazuh-server
+
+      tasks:
+
+        # certbot
+        - block:
+            - include_role:
+                name: wazuh_server_setup_certbot
+          tags: certbot

@@ -1,0 +1,28 @@
+# Initial requirements setup on clean server
+
+- name: Wazuh client requirements
+  when: ansible_distribution in ('Rocky', 'RedHat')
+  tags: requirements
+  block:
+
+    # Requirements
+    - name: Requirements / git, python
+      become: true
+      dnf:
+        name:
+          - git
+          - python3
+          - python3-pip
+
+    - name: Requirements / pip
+      tags: requirements
+      pip:
+        name:
+          - requests
+          - lxml
+          - pyyaml
+
+- name: Wazuh client requirements
+  when: ansible_distribution not in ('Rocky', 'RedHat')
+  fail:
+    msg: "Not implemented"

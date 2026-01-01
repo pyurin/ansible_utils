@@ -1,0 +1,6 @@
+# Start Wazuh server
+
+- name: Wazuh services start
+  community.docker.docker_compose_v2:
+    project_src: "{{ WAZUH_HOST_DOCKER_DIR }}"
+    build: always

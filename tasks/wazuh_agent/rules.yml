@@ -1,0 +1,39 @@
+# Setup generic Wazuh rules
+
+- name: Wazuh agent rules
+  become: true
+  block:
+
+    # Macos MacOSX stream logs, collection rules (by default they don't collect sshd-session logs)
+    - name: Modify agent rules
+      when: ansible_distribution == 'MacOSX'
+      ossconf_edit:
+        path: "{{ WAZUH_AGENT_CONFIG_DIR }}/ossec.conf"
+        when_xpath_exist: /ossec_config/localfile[location='macos']
+        xpath: /ossec_config/localfile[location='macos']/query
+        value: >-
+          (process == "sudo") 
+          or (process == "sessionlogoutd" and message contains "logout is complete.") 
+          or (process == "sshd") or (process == "sshd-session") 
+          or (process == "tccd" and message contains "Update Access Record") 
+          or (message contains "SessionAgentNotificationCenter") or (process == "screensharingd" and message contains "Authentication") 
+          or (process == "securityd" and eventMessage contains "Session" and subsystem == "com.apple.securityd")
+
+    # Modify rules, set frequency for audit log
+    - name: Modify agent rules
+      ossconf_edit:
+        path: "{{ WAZUH_AGENT_CONFIG_DIR }}/ossec.conf"
+        xpath: /ossec_config/localfile[location='/var/log/audit/audit.log']/frequency
+        when_xpath_exist: /ossec_config/localfile[location='/var/log/audit/audit.log']
+        value: "10"
+
+    # Modify rules, collect web logs
+    - name: Modify agent rules
+      ossconf_edit:
+        path: "{{ WAZUH_AGENT_CONFIG_DIR }}/ossec.conf"
+        xpath: /ossec_config/localfile[@id='localfile_01']
+        xml_set_raw: |
+          <localfile id="localfile_01">
+            <log_format>syslog</log_format>
+            <location>/var/log/webapp/*.log</location>
+          </localfile>

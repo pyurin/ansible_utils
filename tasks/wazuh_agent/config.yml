@@ -1,0 +1,23 @@
+# Configure Wazuh agent - set password, host, agent name
+
+# setup auth
+- name: Wazuh agent config / auth
+  shell:
+    cmd: |
+      echo "{{ WAZUH_AGENT_PASS }}" >  {{ WAZUH_AGENT_CONFIG_DIR | quote }}/authd.pass &&
+      chmod 640 {{ WAZUH_AGENT_CONFIG_DIR | quote }}/authd.pass &&
+      chown root:wazuh {{ WAZUH_AGENT_CONFIG_DIR | quote }}/authd.pass
+
+# wazuh agent hostname (useful if if it's updated later)
+- name: Wazuh agent config / agent name
+  ossconf_edit:
+    path: "{{ WAZUH_AGENT_CONFIG_DIR | quote }}/ossec.conf"
+    xpath: /ossec_config/client/enrollment/agent_name
+    value: "{{ inventory_hostname }}"
+
+# wazuh manager host (useful if if it's updated later)
+- name: Wazuh agent config / manager host
+  ossconf_edit:
+    path: "{{ WAZUH_AGENT_CONFIG_DIR | quote }}/ossec.conf"
+    xpath: /ossec_config/client/server/address
+    value: "{{ WAZUH_SERVER_EXTERNAL_HOST }}"

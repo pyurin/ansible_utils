@@ -1,0 +1,11 @@
+- name: Setup wazuh server
+  hosts: wazuh-server
+
+  #collections:
+  #  - pyurin.utils
+
+  tasks:
+
+    # install requirements
+    - include_role:
+        name: get_telegram_chat_id

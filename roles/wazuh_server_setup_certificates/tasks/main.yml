@@ -1,0 +1,24 @@
+# Update Wazuh manager rules
+
+# Set facts
+- include_tasks: ./../../../tasks/wazuh_server/set_facts.yml
+# Setup Wazuh dashboard certificates
+
+- name: Wazuh server / setup certificates
+  shell:
+    cp 
+      {{ WAZUH_SERVER_CERTIFICATE_FULLCHAIN }}
+      {{ WAZUH_HOST_DOCKER_DIR | quote }}/config/wazuh_indexer_ssl_certs/wazuh.dashboard.pem 
+    &&
+    cp
+      {{ WAZUH_SERVER_CERTIFICATE_PRIVATEKEY }}
+      {{ WAZUH_HOST_DOCKER_DIR | quote }}//config/wazuh_indexer_ssl_certs/wazuh.dashboard-key.pem
+    &&
+    docker exec -it -u root single-node-wazuh.dashboard-1 /bin/sh -c '
+      chown -R wazuh-dashboard:wazuh-dashboard /usr/share/wazuh-dashboard/certs/ &&
+      chmod -R 500 /usr/share/wazuh-dashboard/certs/  &&
+      chmod 440 /usr/share/wazuh-dashboard/certs/wazuh-dashboard.pem /usr/share/wazuh-dashboard/certs/wazuh-dashboard-key.pem
+    '
+
+# Restart
+- include_tasks: ./../../../tasks/wazuh_server/restart.yml

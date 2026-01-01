@@ -1,0 +1,157 @@
+# Setup Wazuh server
+
+# Set facts
+- include_tasks: ./../../../tasks/wazuh_server/set_facts.yml
+
+# Check dirs
+- name: Wazuh setup / check main dir
+  ansible.builtin.stat:
+    path: "{{ WAZUH_SERVER_HOST_DIR }}/wazuh-docker/"
+  register: wazuh_exists_check
+
+# Prepare wazuh dir
+- name: Wazuh setup / create main dir
+  when: not wazuh_exists_check.stat.exists
+  become: true
+  file:
+    path: "{{ WAZUH_SERVER_HOST_DIR }}/"
+    state: directory
+    owner: "{{ WAZUH_SERVER_HOST_USER }}"
+    mode: "0755"
+
+# Repo exists check
+- name: Wazuh setup / check repo dir
+  ansible.builtin.stat:
+    path: "{{ WAZUH_SERVER_HOST_DIR }}/wazuh-docker/"
+  register: repo_exists_check
+
+# Pull repo
+- name: Wazuh setup / pull repo
+  when: not repo_exists_check.stat.exists
+  ansible.builtin.git:
+    repo: https://github.com/wazuh/wazuh-docker.git
+    dest: "{{ WAZUH_SERVER_HOST_DIR }}/wazuh-docker"
+    single_branch: yes
+    version: v4.14.1
+
+# Check initial certificates
+- name: Wazuh setup / check certs exist
+  ansible.builtin.stat:
+    path: "{{ WAZUH_HOST_DOCKER_DIR }}/config/wazuh_indexer_ssl_certs"
+  register: wazuh_certs_exist
+
+# Create initial certificates
+- name: Wazuh setup / create certs
+  when: not wazuh_certs_exist.stat.exists
+  shell:
+    cmd:
+      (docker compose -f {{ WAZUH_HOST_DOCKER_DIR | quote }}/generate-indexer-certs.yml run --rm generator) &&
+      chmod -R 0755 {{ WAZUH_HOST_DOCKER_DIR | quote }}/config/
+
+# Update indexer password
+- name: Wazuh setup / password / update docker compose
+  ansible.builtin.replace:
+    path: "{{ WAZUH_HOST_DOCKER_DIR }}/docker-compose.yml"
+    regexp: '- INDEXER_PASSWORD=.*$'
+    replace: '- INDEXER_PASSWORD={{ WAZUH_DASHBOARD_PASS }}'
+
+# Hash dashboard password
+- name: Wazuh setup / passwords / hash
+  command:
+    cmd:
+      "docker run --rm -it wazuh/wazuh-indexer:4.14.1 bash /usr/share/wazuh-indexer/plugins/opensearch-security/tools/hash.sh -p '{{ WAZUH_DASHBOARD_PASS }}'"
+  register: wazuh_pass_hash
+
+# Stop services
+- include_tasks: ./../../../tasks/wazuh_server/stop.yml
+
+# Update dashboard password
+- name: Wazuh setup / passwords / update internal_users.yml
+  yamledit:
+    path: "{{ WAZUH_HOST_DOCKER_DIR }}/config/wazuh_indexer/internal_users.yml"
+    key: admin.hash
+    value: "{{ wazuh_pass_hash.stdout }}"
+
+# Restart services
+- name: Wazuh setup / restart
+  include_tasks: ./../../../tasks/wazuh_server/restart.yml
+
+# Wait indexer ready
+- name: Wazuh setup / wait indexer ready
+  shell:
+    cmd: |
+      python3 -c '
+      import time, requests, http, os, subprocess
+      exit_code = 1
+      
+      for i in range(30):
+        o = subprocess.run(["curl", "http://localhost:9200/"], capture_output=True)
+        if o.returncode == 52: # empty reply from server. opensearch started
+          print("OpenSearch started")
+          exit_code = 0
+          break
+        else:
+          print("Waiting for OpenSearch to start")
+          time.sleep(5)
+      if exit_code != 0:
+        print(f"Timeout, exiting")
+      exit(exit_code)
+      '
+
+# Set indexer options
+- name: Wazuh setup / passwords / set indexer options
+  shell:
+    cmd: |
+      docker exec single-node-wazuh.indexer-1 bash -c '\
+        export INSTALLATION_DIR=/usr/share/wazuh-indexer && \
+        export CONFIG_DIR=$INSTALLATION_DIR/config && \
+        CACERT=$CONFIG_DIR/certs/root-ca.pem && \
+        KEY=$CONFIG_DIR/certs/admin-key.pem && \
+        CERT=$CONFIG_DIR/certs/admin.pem && \
+        export JAVA_HOME=/usr/share/wazuh-indexer/jdk && \
+        echo "CERT = $CACERT" && \
+        bash /usr/share/wazuh-indexer/plugins/opensearch-security/tools/securityadmin.sh -cd $CONFIG_DIR/opensearch-security/ -nhnv -cacert  $CACERT -cert $CERT -key $KEY -p 9200 -icl
+      '
+
+# Set api password
+- name: Wazuh setup / passwords / set api password in wazuh.yml
+  ansible.builtin.replace:
+    path: "{{ WAZUH_HOST_DOCKER_DIR }}/config/wazuh_dashboard/wazuh.yml"
+    regexp: 'password: .*$'
+    replace: 'password: "{{ WAZUH_API_PASS }}"'
+
+# Set api password
+- name: Wazuh setup / passwords / set api password in docker compose
+  ansible.builtin.replace:
+    path: "{{ WAZUH_HOST_DOCKER_DIR }}/docker-compose.yml"
+    regexp: '- API_PASSWORD=.*$'
+    replace: '- API_PASSWORD={{ WAZUH_API_PASS }}'
+
+# Restart
+- name: Wazuh setup / restart
+  include_tasks: ./../../../tasks/wazuh_server/restart.yml
+
+# Agent auth, set use password
+- name: Wazuh setup / agent auth / set use password
+  ansible.builtin.replace:
+    path: "{{ WAZUH_HOST_DOCKER_DIR }}/config/wazuh_cluster/wazuh_manager.conf"
+    regexp: '<use_password>no</use_password>'
+    replace: '<use_password>yes</use_password>'
+
+# Agent auth, set use password
+- name: Wazuh setup / agent auth / set password
+  environment:
+    WAZUH_AGENT_PASS: "{{ WAZUH_AGENT_PASS }}"
+  shell:
+    cmd: |
+      docker exec single-node-wazuh.manager-1 bash -c "
+          echo $WAZUH_AGENT_PASS > /var/ossec/etc/authd.pass &&
+          chown root:wazuh /var/ossec/etc/authd.pass &&
+          chmod 640 /var/ossec/etc/authd.pass &&
+          chmod 0640 /var/ossec/etc/ossec.conf
+        "
+
+# Restart
+- name: Wazuh setup / restart
+  include_tasks:
+    file: ./../../../tasks/wazuh_server/restart.yml

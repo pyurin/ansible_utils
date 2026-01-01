@@ -1,0 +1,4 @@
+# Restart Wazuh server
+
+- include_tasks: stop.yml
+- include_tasks: start.yml

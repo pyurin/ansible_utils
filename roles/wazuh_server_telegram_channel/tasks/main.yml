@@ -1,0 +1,44 @@
+# Setup Wazuh create channel for notifications via telegram
+
+# Set facts
+- include_tasks: ./../../../tasks/wazuh_server/set_facts.yml
+
+# Check chat id is present
+- fail:
+    msg: "WAZUH_TELEGRAM_CHAT_ID must be set (or request with get_telegram_chat_id) role"
+  when: WAZUH_TELEGRAM_CHAT_ID is not defined
+
+# Copy docker image
+- name: Setup telegram channel / copy files
+  copy:
+    src: ../files/docker
+    dest: "{{ WAZUH_HOST_DOCKER_DIR }}/telegram_bot/"
+
+# Set vars
+- name: Setup telegram channel / write config
+  copy:
+    content: |
+      TELEGRAM_API_KEY="{{ WAZUH_TELEGRAM_BOT_API_TOKEN }}"
+      TELEGRAM_CHAT_ID="{{ WAZUH_TELEGRAM_CHAT_ID }}"
+    dest: "{{ WAZUH_HOST_DOCKER_DIR }}/telegram_bot/telegram_config.py"
+
+# Update docker compose
+- name: Setup telegram channel / update docker compose
+  yamledit:
+    path: "{{ WAZUH_HOST_DOCKER_DIR }}/docker-compose.yml"
+    key: 'services.wazuh_telegram_bot'
+    value:
+      build:
+        context: ./telegram_bot/docker/
+        dockerfile: Dockerfile
+      container_name: wazuh-telegram-bot
+      hostname: wazuh-telegram-bot
+      ports:
+        - "1517:8080"
+      restart: unless-stopped
+      environment:
+        - FLASK_ENV=development
+
+# Restart
+- name: Setup telegram channel / restart Wazuh
+  include_tasks: ./../../../tasks/wazuh_server/restart.yml

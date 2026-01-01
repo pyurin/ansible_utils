@@ -1,0 +1,99 @@
+# Update Wazuh manager rules
+
+# Set facts
+- include_tasks: ./../../../tasks/wazuh_server/set_facts.yml
+# Setup certbot for Wazuh dashboard
+
+# Check dirs exist
+- name: Wazuh server / certbot / check dirs exist
+  block:
+    - name: "Wazuh server / certbot / check etc dir {{ WAZUH_CERTBOT_ETC_PATH }}"
+      ansible.builtin.stat:
+        path: "{{ WAZUH_CERTBOT_ETC_PATH }}"
+      register: wazuh_certbot_etc_dir
+    - name: "Wazuh server / certbot / check var dir {{ WAZUH_CERTBOT_VAR_PATH }}"
+      ansible.builtin.stat:
+        path: "{{ WAZUH_CERTBOT_VAR_PATH }}"
+      register: wazuh_certbot_var_dir
+    - name: "Wazuh server / certbot / check log dir {{ WAZUH_CERTBOT_LOG_PATH }}"
+      ansible.builtin.stat:
+        path: "{{ WAZUH_CERTBOT_LOG_PATH }}"
+      register: wazuh_certbot_log_dir
+    - fail:
+        msg: "Etc dir does not exist {{ WAZUH_CERTBOT_ETC_PATH }}"
+      when: wazuh_certbot_etc_dir.stat.isdir is not defined
+    - fail:
+        msg: "Etc dir does not exist {{ WAZUH_CERTBOT_VAR_PATH }}"
+      when: wazuh_certbot_var_dir.stat.isdir is not defined
+    - fail:
+        msg: "Etc dir does not exist {{ WAZUH_CERTBOT_LOG_PATH }}"
+      when: wazuh_certbot_log_dir.stat.isdir is not defined
+
+
+# Create certbot container
+- name: Wazuh server / certbot
+  block:
+
+    # Create Dockerfile
+    - name: Wazuh server / certbot / write Dockerfile
+      shell:
+        cmd: |
+          cat <<'EOF' > {{ WAZUH_HOST_DOCKER_DIR | quote }}/certbot.Dockerfile
+          FROM certbot/certbot:latest
+          WORKDIR /opt/certbot
+          CMD ["certonly", "--standalone", "--non-interactive", "--agree-tos"]
+          EOF
+
+    # Update docker compose
+    - name: Wazuh server / certbot / update docker compose
+      yamledit:
+        path: "{{ WAZUH_HOST_DOCKER_DIR }}/docker-compose.yml"
+        key: 'services.wazuh_certbot'
+        value:
+          build:
+            context: .
+            dockerfile: certbot.Dockerfile
+
+          volumes:
+            # Persist certificates
+            - "{{ WAZUH_CERTBOT_ETC_PATH }}:/etc/letsencrypt"
+            - "{{ WAZUH_CERTBOT_VAR_PATH }}:/var/lib/letsencrypt"
+            - "{{ WAZUH_CERTBOT_LOG_PATH }}:/var/log/letsencrypt"
+
+          container_name: wazuh-certbot
+          hostname: wazuh-certbot
+          ports:
+            - "80:80"
+          restart: unless-stopped
+
+          # Obtain certificate
+          command:
+            certonly --standalone --non-interactive --agree-tos
+            --keep-until-expiring --register-unsafely-without-email
+            -d {{ WAZUH_SERVER_EXTERNAL_HOST | quote }}
+
+    # Update start container
+    - name: Wazuh server / certbot / start container
+      community.docker.docker_compose_v2:
+        project_src: "{{ WAZUH_HOST_DOCKER_DIR }}"
+        build: always
+        services:
+          - wazuh_certbot
+
+    # Wait for the certificate to become ready
+    - name: Wazuh server / certbot / wait for certificates
+      wait_for:
+        path: "{{ WAZUH_CERTBOT_ETC_PATH }}/live/{{ WAZUH_SERVER_EXTERNAL_HOST | quote}}/fullchain.pem"
+
+    - name: Wazuh server / certbot / wait for certificates
+      wait_for:
+        path: "{{ WAZUH_CERTBOT_ETC_PATH }}/live/{{ WAZUH_SERVER_EXTERNAL_HOST | quote}}/privkey.pem"
+
+    # Set certificates
+    - name: Wazuh server / certbot / set certificates
+      include_role:
+        name: wazuh_server_setup_certificates
+      vars:
+        WAZUH_SERVER_CERTIFICATE_FULLCHAIN: "{{ WAZUH_CERTBOT_ETC_PATH }}/live/{{ WAZUH_SERVER_EXTERNAL_HOST | quote}}/fullchain.pem"
+        WAZUH_SERVER_CERTIFICATE_PRIVATEKEY: "{{ WAZUH_CERTBOT_ETC_PATH }}/live/{{ WAZUH_SERVER_EXTERNAL_HOST | quote}}/privkey.pem"
+

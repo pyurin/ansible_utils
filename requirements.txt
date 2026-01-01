@@ -1,0 +1,6 @@
+# Python dependencies for pyurin.utils Ansible collection
+# These will be automatically installed by the modules when needed
+
+lxml>=4.6.0
+requests>=2.25.0
+PyYAML>=5.4.0

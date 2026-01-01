@@ -1,0 +1,33 @@
+# Get telgram chat id if not set in vars
+
+# Set facts
+- include_tasks: ./../../../tasks/wazuh_server/set_facts.yml
+
+- name: Telegram / get chat id
+  when: WAZUH_TELEGRAM_CHAT_ID is not defined
+  block:
+
+    # We need to get chat id to send messages to selected user
+    # this task will fail if you don't send a message to the bot
+    # if this task fails - just send a /start message to the bot
+    - name: Telegram / get chat id / api call
+      local_action: script
+      args:
+        cmd: "./../files/get_telegram_chat_id.py {{ WAZUH_TELEGRAM_BOT_API_TOKEN | quote }} {{ WAZUH_TELEGRAM_DST_USER | quote }}"
+        executable: python3
+      register: telegram_chat_id
+
+    # Check output
+    - name: Telegram / get chat id / check result
+      fail:
+        msg: "Could not get telegram chat id. Send a message to telegram bot and start again"
+      when: telegram_chat_id.stdout_lines[0] == "not_found"
+
+    # Print chat id
+    - name: "Telegram / get chat id / chat id = {{ telegram_chat_id.stdout_lines[0] | default(WAZUH_TELEGRAM_CHAT_ID) }}"
+      debug:
+        msg: "Store {{ telegram_chat_id.stdout_lines[0] }} telegram chat id as WAZUH_TELEGRAM_CHAT_ID "
+
+    # Set WAZUH_TELEGRAM_CHAT_ID
+    - set_fact:
+        WAZUH_TELEGRAM_CHAT_ID: "{{ telegram_chat_id.stdout_lines[0] }}"
